@@ -1,15 +1,15 @@
-# ⚡ WellQ / Kinetic (v0.2.5)
+# ⚡ Kinetic (v0.2.5)
 
 ### The High-Velocity, Agentic Offensive MCP Gateway
 
-![WellQ Kinetic Logo](assets/logo.png)
+![Kinetic Logo](assets/logo.png)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-red.svg)](https://opensource.org/licenses/MIT)
 [![Python: 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Docker: Supported](https://img.shields.io/badge/Docker-Ready-cyan.svg)](https://www.docker.com/)
 [![MCP: Enabled](https://img.shields.io/badge/MCP-FastMCP-orange.svg)](https://modelcontextprotocol.io)
 
-**WellQ / Kinetic** is a next-generation Model Context Protocol (MCP) gateway designed for professional Red Teams and Vulnerability Researchers. It transforms Claude into an autonomous security operator by providing a multi-threaded, dockerized, and "safe-shell" execution environment.
+**Kinetic** is a next-generation Model Context Protocol (MCP) gateway designed for professional Red Teams and Vulnerability Researchers. It transforms Claude into an autonomous security operator by providing a multi-threaded, dockerized, and "safe-shell" execution environment.
 
 ---
 
@@ -42,7 +42,7 @@
 
 ## 🏗️ Architecture
 
-WellQ / Kinetic utilizes a decoupled microservices architecture:
+Kinetic utilizes a decoupled microservices architecture:
 
 - **The Gate (MCP Server)**  
   FastMCP implementation mapping AI intent to the engine.
