@@ -1,0 +1,35 @@
+name: nmap
+binary: nmap
+description: Network port scanner and service detection.
+structured_output:
+  format: xml
+  flag: "-oX"
+  # Path placeholder: {task_id} is replaced at runtime.
+  path: "/tmp/kinetic/logs/{task_id}.xml"
+default_flags:
+  - "-oN"
+  - "/tmp/kinetic/logs/nmap_latest.txt"
+allowed_flags:
+  - "-sV"
+  - "-sC"
+  - "-sS"
+  - "-sU"
+  - "-sT"
+  - "-Pn"
+  - "-p"
+  - "-T0"
+  - "-T1"
+  - "-T2"
+  - "-T3"
+  - "-T4"
+  - "-T5"
+  - "--top-ports"
+  - "-A"
+  - "-O"
+  - "--script"
+  - "-v"
+  - "-vv"
+  - "--open"
+  - "-n"
+  - "--min-rate"
+  - "--max-rate"

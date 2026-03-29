@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  kinetic-engine:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: kinetic-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - SELENIUM_URL=http://selenium-chrome:4444
+      - KINETIC_ENGINE_URL=http://localhost:8000
+    volumes:
+      - kinetic-logs:/tmp/kinetic/logs
+    depends_on:
+      selenium-chrome:
+        condition: service_started
+    networks:
+      - kinetic-net
+    restart: unless-stopped
+
+  selenium-chrome:
+    image: selenium/standalone-chrome:latest
+    container_name: kinetic-selenium
+    ports:
+      - "4444:4444"
+      - "7900:7900"   # noVNC for debugging
+    shm_size: "2g"
+    environment:
+      - SE_NODE_MAX_SESSIONS=4
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+    networks:
+      - kinetic-net
+    restart: unless-stopped
+
+volumes:
+  kinetic-logs:
+
+networks:
+  kinetic-net:
+    driver: bridge

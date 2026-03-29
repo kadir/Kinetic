@@ -1,0 +1,22 @@
+name: curl
+binary: curl
+description: HTTP client for probing endpoints.
+default_flags:
+  - "-s"
+  - "-o"
+  - "/tmp/kinetic/logs/curl_latest.txt"
+  - "-w"
+  - "\\n%{http_code} %{time_total}s\\n"
+allowed_flags:
+  - "-v"
+  - "-L"
+  - "-k"
+  - "-I"
+  - "-H"
+  - "-X"
+  - "-d"
+  - "--max-time"
+  - "--connect-timeout"
+  - "-A"
+  - "-o"
+  - "-D"

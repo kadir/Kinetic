@@ -1,0 +1,32 @@
+name: ffuf
+binary: ffuf
+description: Fast web fuzzer for directory/parameter brute-forcing.
+structured_output:
+  format: json
+  flag: "-o"
+  path: "/tmp/kinetic/logs/{task_id}.json"
+  extra_flags:
+    - "-of"
+    - "json"
+default_flags: []
+allowed_flags:
+  - "-u"
+  - "-w"
+  - "-mc"
+  - "-fc"
+  - "-fs"
+  - "-fw"
+  - "-fl"
+  - "-t"
+  - "-rate"
+  - "-timeout"
+  - "-H"
+  - "-X"
+  - "-d"
+  - "-r"
+  - "-recursion"
+  - "-recursion-depth"
+  - "-e"
+  - "-v"
+  - "-ac"
+  - "-s"

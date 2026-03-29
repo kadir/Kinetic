@@ -1,0 +1,25 @@
+name: nuclei
+binary: nuclei
+description: Template-based vulnerability scanner.
+structured_output:
+  format: jsonl
+  flag: "-je"
+  path: "/tmp/kinetic/logs/{task_id}.json"
+default_flags: []
+allowed_flags:
+  - "-t"
+  - "-tags"
+  - "-severity"
+  - "-type"
+  - "-u"
+  - "-l"
+  - "-c"
+  - "-rl"
+  - "-timeout"
+  - "-retries"
+  - "-silent"
+  - "-json"
+  - "-je"
+  - "-as"
+  - "-headless"
+  - "--new-templates"
