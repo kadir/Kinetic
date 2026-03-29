@@ -1,0 +1,27 @@
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+
+# Kinetic Workspace & Tools
+/tmp/kinetic/
+/data/loot.db
+workspaces/
+*.log
+
+# Docker
+.docker_id

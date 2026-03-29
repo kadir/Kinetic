@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   kinetic-engine:
     build:
@@ -22,7 +20,7 @@ services:
     restart: unless-stopped
 
   selenium-chrome:
-    image: selenium/standalone-chrome:latest
+    image: selenium/standalone-chromium:latest
     container_name: kinetic-selenium
     ports:
       - "4444:4444"

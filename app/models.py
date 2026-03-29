@@ -7,6 +7,9 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
+# ── Execute ──────────────────────────────────────────────────────────────────
+
+
 class ExecuteRequest(BaseModel):
     """Request body for POST /execute."""
 
@@ -50,3 +53,43 @@ class AbortResponse(BaseModel):
     pid: Optional[int] = None
     status: str
     detail: str
+
+
+# ── Workspace ────────────────────────────────────────────────────────────────
+
+
+class CloneRequest(BaseModel):
+    """Request body for POST /workspace/clone."""
+
+    repo_url: str = Field(
+        ...,
+        description="Git repository URL to clone.",
+        pattern=r"^(https://|git@).+$",
+    )
+    ttl: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+        description="Time-to-live in seconds before auto-cleanup (60-86400).",
+    )
+
+
+class WorkspaceResponse(BaseModel):
+    workspace_id: str
+    repo_url: str
+    path: str
+    status: str
+    ttl: int
+    error: Optional[str] = None
+
+
+class FileEntry(BaseModel):
+    path: str
+    type: str
+    size: Optional[int] = None
+
+
+class FileListResponse(BaseModel):
+    workspace_id: str
+    total_files: int
+    files: list[FileEntry]

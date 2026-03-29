@@ -1,0 +1,27 @@
+name: kiterunner
+binary: kr
+description: API endpoint brute-forcer using OpenAPI/Swagger schemas and wordlists.
+target_flag: "--target"
+structured_output:
+  format: jsonl
+  flag: "--output"
+  path: "/tmp/kinetic/logs/{task_id}.json"
+  extra_flags:
+    - "--output-format"
+default_flags:
+  - "scan"
+allowed_flags:
+  - "-w"
+  - "-A"
+  - "--fail-status-codes"
+  - "--success-status-codes"
+  - "-x"
+  - "--max-connection-per-host"
+  - "--max-parallel-hosts"
+  - "--max-redirects"
+  - "-d"
+  - "--header"
+  - "-j"
+  - "--timeout"
+  - "--progress"
+  - "-q"

@@ -48,6 +48,12 @@ RUN wget -q https://github.com/gitleaks/gitleaks/releases/latest/download/gitlea
     && rm /tmp/gitleaks.tar.gz \
     && chmod +x /usr/local/bin/gitleaks
 
+# Install KiteRunner (API endpoint brute-forcer).
+RUN wget -q https://github.com/assetnote/kiterunner/releases/latest/download/kiterunner_$(wget -qO- https://api.github.com/repos/assetnote/kiterunner/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//')_linux_amd64.tar.gz -O /tmp/kr.tar.gz \
+    && tar -xzf /tmp/kr.tar.gz -C /usr/local/bin/ kr \
+    && rm /tmp/kr.tar.gz \
+    && chmod +x /usr/local/bin/kr
+
 # Install Semgrep (Python-based).
 RUN pip install --no-cache-dir semgrep
 

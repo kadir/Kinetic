@@ -1,11 +1,10 @@
 """
 Kinetic Strike Engine — FastAPI core.
 
-Exposes /execute to launch validated pentesting tools as async subprocesses,
-/tasks/{id} to poll status, /tasks/{id}/logs to stream output, and
-DELETE /execute/{task_id} as an emergency kill switch.
+Exposes /execute for tool dispatch, /workspace/* for repo lifecycle,
+/tasks/* for status polling, and DELETE /execute/{id} as the kill switch.
 
-v0.2.5: Path-mode tools, structured-output-via-stdout, expanded arsenal.
+v0.3.0: Workspace Manager, KiteRunner, renamed tool surface.
 """
 
 from __future__ import annotations
@@ -20,9 +19,13 @@ from fastapi.responses import PlainTextResponse
 
 from app.models import (
     AbortResponse,
+    CloneRequest,
     ExecuteRequest,
     ExecuteResponse,
+    FileEntry,
+    FileListResponse,
     TaskStatusResponse,
+    WorkspaceResponse,
 )
 from app.task_manager import TaskManager
 from app.validator import (
@@ -31,6 +34,7 @@ from app.validator import (
     validate_target,
     validate_tool_and_flags,
 )
+from app.workspace import WorkspaceManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,28 +43,123 @@ logging.basicConfig(
 logger = logging.getLogger("kinetic.api")
 
 task_manager: TaskManager
+workspace_manager: WorkspaceManager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global task_manager
+    global task_manager, workspace_manager
     task_manager = TaskManager(max_concurrent=8)
+    workspace_manager = WorkspaceManager()
+    workspace_manager.start_cleanup_loop()
     logger.info("Kinetic Strike Engine online.")
     yield
+    await workspace_manager.stop()
     logger.info("Kinetic Strike Engine shutting down.")
 
 
 app = FastAPI(
     title="Kinetic Strike Engine",
     description="Multi-threaded offensive tool gateway for authorized security testing.",
-    version="0.2.5",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "engine": "kinetic", "version": "0.2.5"}
+    return {"status": "ok", "engine": "kinetic", "version": "0.3.0"}
+
+
+# ── Workspace Management ────────────────────────────────────────────────────
+
+
+@app.post("/workspace/clone", response_model=WorkspaceResponse)
+async def clone_workspace(req: CloneRequest):
+    """
+    Clone a git repo into an isolated workspace directory.
+
+    The workspace is assigned a unique ID and auto-deleted after TTL expires.
+    """
+    entry = await workspace_manager.clone(repo_url=req.repo_url, ttl=req.ttl)
+    return WorkspaceResponse(
+        workspace_id=entry.workspace_id,
+        repo_url=entry.repo_url,
+        path=entry.path,
+        status=entry.clone_status,
+        ttl=entry.ttl,
+        error=entry.error,
+    )
+
+
+@app.get("/workspace/{workspace_id}", response_model=WorkspaceResponse)
+async def get_workspace(workspace_id: str):
+    """Get the status of a workspace."""
+    entry = workspace_manager.get(workspace_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return WorkspaceResponse(
+        workspace_id=entry.workspace_id,
+        repo_url=entry.repo_url,
+        path=entry.path,
+        status=entry.clone_status,
+        ttl=entry.ttl,
+        error=entry.error,
+    )
+
+
+@app.get("/workspace/{workspace_id}/files", response_model=FileListResponse)
+async def list_workspace_files(
+    workspace_id: str,
+    subpath: str = "",
+    max_depth: int = 3,
+):
+    """
+    List files inside a cloned workspace.
+
+    Returns a tree of files and directories (excluding .git internals).
+    """
+    files = workspace_manager.list_files(
+        workspace_id, subpath=subpath, max_depth=max_depth,
+    )
+    if files is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found or not ready",
+        )
+    return FileListResponse(
+        workspace_id=workspace_id,
+        total_files=len([f for f in files if f["type"] == "file"]),
+        files=[FileEntry(**f) for f in files],
+    )
+
+
+@app.delete("/workspace/{workspace_id}")
+async def delete_workspace(workspace_id: str):
+    """Delete a workspace and all its files."""
+    deleted = await workspace_manager.delete(workspace_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return {"workspace_id": workspace_id, "status": "deleted"}
+
+
+@app.get("/workspace")
+async def list_workspaces():
+    """List all active (non-deleted) workspaces."""
+    return [
+        WorkspaceResponse(
+            workspace_id=ws.workspace_id,
+            repo_url=ws.repo_url,
+            path=ws.path,
+            status=ws.clone_status,
+            ttl=ws.ttl,
+            error=ws.error,
+        )
+        for ws in workspace_manager.list_all()
+    ]
+
+
+# ── Tool Execution ──────────────────────────────────────────────────────────
 
 
 @app.post("/execute", response_model=ExecuteResponse)
