@@ -1,4 +1,5 @@
-# ⚡ Kinetic (v0.2.5)
+# ⚡ WellQ / Kinetic (v0.2.5)
+
 ### The High-Velocity, Agentic Offensive MCP Gateway
 
 ![WellQ Kinetic Logo](assets/logo.png)
@@ -8,37 +9,105 @@
 [![Docker: Supported](https://img.shields.io/badge/Docker-Ready-cyan.svg)](https://www.docker.com/)
 [![MCP: Enabled](https://img.shields.io/badge/MCP-FastMCP-orange.svg)](https://modelcontextprotocol.io)
 
-**WellQ / Kinetic** is a next-generation Model Context Protocol (MCP) gateway designed for professional Red Teams and Vulnerability Researchers. It transforms Claude (or any MCP-compatible LLM) into an autonomous security operator by providing a multi-threaded, dockerized, and "safe-shell" execution environment.
-
-Unlike standard MCP servers, **Kinetic** acts as a tactical middleman—validating intent, parsing complex tool outputs into structured JSON, and providing headless browser eyes for DOM-based exploitation.
+**WellQ / Kinetic** is a next-generation Model Context Protocol (MCP) gateway designed for professional Red Teams and Vulnerability Researchers. It transforms Claude into an autonomous security operator by providing a multi-threaded, dockerized, and "safe-shell" execution environment.
 
 ---
 
 ## 🚀 Key Features
 
-* **⚡ Multi-Threaded Execution:** Powered by a FastAPI-based "Strike Engine" that handles concurrent Nmap, Nuclei, and Ffuf scans without blocking.
-* **🛡️ The "Safe-Shell" Validator:** Strict Pydantic-based input validation and YAML-defined tool allowlists to prevent AI command injection.
-* **👁️ Visual Intel:** Integrated Selenium sidecar for automated XSS verification, CMS fingerprinting, and page screenshots.
-* **🧬 Researcher Arsenal:** Pre-installed with `Semgrep`, `Gitleaks`, `Subfinder`, `Amass`, and `Arjun` for full-spectrum recon and SAST.
-* **📦 One-Click Deployment:** Fully dockerized architecture with a dedicated workspace manager for ephemeral git cloning and code auditing.
-* **🛑 Emergency Brake:** Global `abort_scan` tool allowing the AI (or human) to instantly terminate rogue processes via SIGKILL.
+- ⚡ **Multi-Threaded Execution**  
+  Powered by a FastAPI-based *Strike Engine* that handles concurrent Nmap, Nuclei, and Ffuf scans.
+
+- 🛡️ **Safe-Shell Validator**  
+  Strict Pydantic-based input validation with YAML-defined tool allowlists.
+
+- 👁️ **Visual Intel**  
+  Integrated Selenium sidecar for automated XSS verification and page screenshots.
+
+- 🧬 **Researcher Arsenal**  
+  Pre-installed tools:
+  - Semgrep
+  - Gitleaks
+  - Subfinder
+  - Amass
+  - Arjun
+
+- 📦 **One-Click Deployment**  
+  Fully dockerized architecture with a dedicated workspace manager for ephemeral git cloning.
+
+- 🛑 **Emergency Brake**  
+  Global `abort_scan` tool for instant termination of rogue processes.
 
 ---
 
-## 🛠️ Architecture
+## 🏗️ Architecture
 
-WellQ / Kinetic utilizes a decoupled microservices architecture to ensure host safety and maximum performance:
+WellQ / Kinetic utilizes a decoupled microservices architecture:
 
-* **The Gate (MCP Server):** A FastMCP implementation that maps AI intent to the Engine.
-* **The Strike Engine (FastAPI):** An asynchronous backend that manages the `TaskRunner` and tool lifecycle.
-* **The Vault (Docker):** A hardened Kali-rolling based container containing the offensive binaries.
-* **The Eye (Selenium):** A standalone Chrome sidecar for headless DOM interaction.
+- **The Gate (MCP Server)**  
+  FastMCP implementation mapping AI intent to the engine.
+
+- **The Strike Engine (FastAPI)**  
+  Asynchronous backend managing the TaskRunner.
+
+- **The Vault (Docker)**  
+  Hardened container containing offensive binaries.
+
+- **The Eye (Selenium)**  
+  Standalone Chrome sidecar for headless DOM interaction.
 
 ---
 
 ## 📥 Installation & Setup
 
-### 1. Clone the Repository
+### 1. Launch the Infrastructure
+
 ```bash
-git clone [https://github.com/wellq-io/kinetic.git](https://github.com/wellq-io/kinetic.git)
-cd kinetic
+cd docker
+docker compose up -d --build
+```
+
+### 2. Connect to Claude
+
+Add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "kinetic": {
+      "command": "python3",
+      "args": ["/path/to/kinetic/mcp/server.py"],
+      "env": {
+        "KINETIC_ENGINE_URL": "http://localhost:8000"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 🧪 Current Toolset (v0.2.5)
+
+| Category | Tools | Purpose |
+|----------|------|--------|
+| Recon | Subfinder, Amass, Nmap | Infrastructure Mapping |
+| Web | Nuclei, Ffuf, Arjun | Vulnerability Scanning & Parameter Discovery |
+| SAST | Semgrep, Gitleaks | Source Auditing & Secret Detection |
+| Dynamic | Selenium, Curl | DOM Analysis & Payload Verification |
+| System | Git, Workspace | Ephemeral Repository Cloning |
+
+---
+
+## ⚠️ Ethical Disclosure
+
+WellQ / Kinetic is intended for **authorized security testing only**.  
+Unauthorized access or misuse is illegal.  
+
+The developers assume **no liability** for misuse of this software.
+
+---
+
+## 🧠 About
+
+Developed by **WellQ.io**
