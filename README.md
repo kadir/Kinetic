@@ -101,7 +101,7 @@ Add the following to your `claude_desktop_config.json`:
 
 ## ⚠️ Ethical Disclosure
 
-WellQ / Kinetic is intended for **authorized security testing only**.  
+Kinetic is intended for **authorized security testing only**.  
 Unauthorized access or misuse is illegal.  
 
 The developers assume **no liability** for misuse of this software.
