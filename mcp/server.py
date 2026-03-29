@@ -31,6 +31,8 @@ import re
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from selenium import webdriver
+from selenium.webdriver.chromium.options import ChromiumOptions
 
 ENGINE_URL = os.getenv("KINETIC_ENGINE_URL", "http://localhost:8000")
 SELENIUM_URL = os.getenv("SELENIUM_URL", "http://localhost:4444")
@@ -551,9 +553,6 @@ async def web_screenshot(target: str) -> str:
     Args:
         target: Full URL to profile (e.g. https://example.com).
     """
-    from selenium import webdriver
-    from selenium.webdriver.chromium.options import ChromiumOptions as ChromeOptions
-
     profile: dict = {
         "url": target,
         "page_title": None,
@@ -571,7 +570,7 @@ async def web_screenshot(target: str) -> str:
     except Exception:
         pass
 
-    options = ChromeOptions()
+    options = ChromiumOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")

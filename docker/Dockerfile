@@ -31,19 +31,20 @@ RUN wget -q https://github.com/ffuf/ffuf/releases/latest/download/ffuf_$(wget -q
 
 # Install Subfinder.
 RUN wget -q https://github.com/projectdiscovery/subfinder/releases/latest/download/subfinder_$(wget -qO- https://api.github.com/repos/projectdiscovery/subfinder/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//')_linux_amd64.zip -O /tmp/subfinder.zip \
-    && unzip /tmp/subfinder.zip -d /usr/local/bin/ \
+    && unzip -o /tmp/subfinder.zip -d /usr/local/bin/ \
     && rm /tmp/subfinder.zip \
     && chmod +x /usr/local/bin/subfinder
 
-# Install Amass.
-RUN wget -q https://github.com/owasp-amass/amass/releases/latest/download/amass_Linux_amd64.zip -O /tmp/amass.zip \
-    && unzip /tmp/amass.zip -d /tmp/amass \
-    && mv /tmp/amass/amass_Linux_amd64/amass /usr/local/bin/amass \
-    && rm -rf /tmp/amass /tmp/amass.zip \
-    && chmod +x /usr/local/bin/amass
+# Install Amass v4.2.0 (ARM64 Native)
+RUN wget -q https://github.com/owasp-amass/amass/releases/download/v4.2.0/amass_Linux_arm64.zip -O /tmp/amass.zip \
+    && unzip -o /tmp/amass.zip -d /tmp/ \
+    && mv /tmp/amass_Linux_arm64/amass /usr/local/bin/amass \
+    && chmod +x /usr/local/bin/amass \
+    && rm -rf /tmp/amass.zip /tmp/amass_Linux_arm64
 
-# Install Gitleaks.
-RUN wget -q https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//')_linux_amd64.tar.gz -O /tmp/gitleaks.tar.gz \
+# Install Gitleaks (ARM64 Native)
+RUN GITLEAKS_VERSION=$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//') && \
+    wget -q https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_arm64.tar.gz -O /tmp/gitleaks.tar.gz \
     && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin/ gitleaks \
     && rm /tmp/gitleaks.tar.gz \
     && chmod +x /usr/local/bin/gitleaks
