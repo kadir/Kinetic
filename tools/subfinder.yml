@@ -1,0 +1,19 @@
+name: subfinder
+binary: subfinder
+description: Subdomain discovery tool using passive sources.
+target_flag: "-d"
+structured_output:
+  format: jsonl
+  flag: "-oJ"
+  path: "/tmp/kinetic/logs/{task_id}.json"
+default_flags: []
+allowed_flags:
+  - "-silent"
+  - "-t"
+  - "-timeout"
+  - "-rL"
+  - "-nW"
+  - "-all"
+  - "-recursive"
+  - "-max-time"
+  - "-cs"

@@ -1,0 +1,21 @@
+name: gitleaks
+binary: gitleaks
+description: Secret scanner for git repositories and directories.
+target_mode: path
+target_flag: "--source"
+structured_output:
+  format: json
+  flag: "--report-format"
+  path: "/tmp/kinetic/logs/{task_id}.json"
+  extra_flags:
+    - "--report-path"
+default_flags:
+  - "detect"
+  - "--no-banner"
+allowed_flags:
+  - "--config"
+  - "--baseline-path"
+  - "--log-level"
+  - "--max-target-megabytes"
+  - "--no-git"
+  - "-v"

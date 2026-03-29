@@ -4,11 +4,14 @@ Kinetic Strike Engine — FastAPI core.
 Exposes /execute to launch validated pentesting tools as async subprocesses,
 /tasks/{id} to poll status, /tasks/{id}/logs to stream output, and
 DELETE /execute/{task_id} as an emergency kill switch.
+
+v0.2.5: Path-mode tools, structured-output-via-stdout, expanded arsenal.
 """
 
 from __future__ import annotations
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,7 +25,12 @@ from app.models import (
     TaskStatusResponse,
 )
 from app.task_manager import TaskManager
-from app.validator import load_tool_config, validate_target, validate_tool_and_flags
+from app.validator import (
+    load_tool_config,
+    validate_path_target,
+    validate_target,
+    validate_tool_and_flags,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,14 +53,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Kinetic Strike Engine",
     description="Multi-threaded offensive tool gateway for authorized security testing.",
-    version="0.2.0",
+    version="0.2.5",
     lifespan=lifespan,
 )
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "engine": "kinetic", "version": "0.2.0"}
+    return {"status": "ok", "engine": "kinetic", "version": "0.2.5"}
 
 
 @app.post("/execute", response_model=ExecuteResponse)
@@ -61,44 +69,83 @@ async def execute(req: ExecuteRequest):
     Launch a security tool against a target.
 
     Automatically injects structured-output flags (JSON/XML) when the tool
-    supports it, so results can be parsed into dictionaries.
+    supports it. For path-mode tools (semgrep, gitleaks), the target is
+    treated as a filesystem path under the workspace directory.
     """
-    # Validate target string.
-    target_err = validate_target(req.target)
+    config = load_tool_config(req.tool)
+    if not config:
+        raise HTTPException(status_code=422, detail=f"Unknown tool: {req.tool!r}")
+
+    is_path_mode = config.get("target_mode") == "path"
+
+    # Validate target based on mode.
+    if is_path_mode:
+        target_err = validate_path_target(req.target)
+    else:
+        target_err = validate_target(req.target)
     if target_err:
         raise HTTPException(status_code=422, detail=target_err)
 
-    # Validate tool + flags and resolve the full argument list.
+    # Validate flags against allowlist.
     resolved_flags, flag_err = validate_tool_and_flags(req.tool, req.flags)
     if flag_err:
         raise HTTPException(status_code=422, detail=flag_err)
 
-    # Build the final argv.
-    args = resolved_flags + [req.target]
+    # Build argv — resolved_flags include defaults.
+    # If the tool specifies a target_flag (e.g. "--source" for gitleaks),
+    # inject it as a flag pair instead of a positional argument.
+    target_flag = config.get("target_flag")
+    if target_flag:
+        args = resolved_flags + [target_flag, req.target]
+    else:
+        args = resolved_flags + [req.target]
 
-    # Detect structured output support from tool YAML config.
+    # Detect structured output support.
     structured_path: str | None = None
     structured_fmt: str | None = None
-    config = load_tool_config(req.tool)
-    if config and "structured_output" in config:
-        so = config["structured_output"]
-        # Generate a task-scoped output path.
-        import uuid
+    structured_via_stdout: bool = False
+    task_hint = uuid.uuid4().hex[:12]
 
-        task_hint = uuid.uuid4().hex[:12]
+    if "structured_output" in config:
+        so = config["structured_output"]
         out_path = so["path"].replace("{task_id}", task_hint)
         structured_path = out_path
         structured_fmt = so["format"]
+        structured_via_stdout = so.get("output_via_stdout", False)
 
-        # Inject the structured-output flag and path into args.
-        args = [so["flag"], out_path] + so.get("extra_flags", []) + args
+        if structured_via_stdout:
+            # Flag goes into args but output is captured from stdout, not a file.
+            args = [so["flag"]] + so.get("extra_flags", []) + args
+        else:
+            # Inject flag + output path into args.
+            inject = [so["flag"]]
+            extra = so.get("extra_flags", [])
+
+            # Some tools split flag and path (e.g. gitleaks --report-format json
+            # --report-path /path), others combine them (e.g. -oX /path).
+            # If extra_flags exist, the path goes after them.
+            if extra:
+                inject.append(so["format"])
+                inject.extend(extra)
+                inject.append(out_path)
+            else:
+                inject.append(out_path)
+
+            args = inject + args
+
+    # For path-mode tools, run in the target directory.
+    cwd: str | None = None
+    if is_path_mode:
+        cwd = req.target
 
     task_id = await task_manager.submit(
         tool=req.tool,
         args=args,
         target=req.target,
+        cwd=cwd,
         structured_output_path=structured_path,
         structured_output_format=structured_fmt,
+        structured_via_stdout=structured_via_stdout,
     )
 
     return ExecuteResponse(

@@ -2,7 +2,7 @@
 Kinetic MCP Gate — FastMCP server exposing pentesting tools to Claude.
 
 Each tool dispatches work to the Strike Engine API and polls for results.
-v0.2.0: Structured output parsing, abort_scan, target profiling.
+v0.2.5: code_audit, enumerate_subdomains, find_hidden_params, scan_secrets.
 """
 
 from __future__ import annotations
@@ -17,16 +17,25 @@ from mcp.server.fastmcp import FastMCP
 
 ENGINE_URL = os.getenv("KINETIC_ENGINE_URL", "http://localhost:8000")
 SELENIUM_URL = os.getenv("SELENIUM_URL", "http://localhost:4444")
+WORKSPACE = os.getenv("KINETIC_WORKSPACE", "/tmp/kinetic/workspace")
 POLL_INTERVAL = 2.0
 POLL_TIMEOUT = 300.0
 
 mcp = FastMCP(
     "Kinetic Gate",
     instructions=(
-        "Kinetic is an offensive security MCP gateway. "
-        "Use these tools for authorized vulnerability research and pentesting only."
+        "Kinetic is an offensive security MCP gateway for authorized pentesting. "
+        "Tool selection guidance:\n"
+        "- When given a file path or git repo URL → use code_audit or scan_secrets\n"
+        "- When given a root domain (e.g. example.com) → use enumerate_subdomains\n"
+        "- When given a URL → use vuln_scan, find_hidden_params, or web_screenshot\n"
+        "- When given an IP or CIDR → use port_scan\n"
+        "- To stop any running scan → use abort_scan"
     ),
 )
+
+
+# ── Shared Helpers ───────────────────────────────────────────────────────────
 
 
 async def _execute_and_wait(
@@ -52,12 +61,38 @@ async def _execute_and_wait(
             data = status_resp.json()
 
             if data["status"] in ("completed", "failed", "cancelled"):
-                # Fetch raw logs as fallback.
                 logs_resp = await client.get(f"/tasks/{task_id}/logs")
                 raw_output = logs_resp.text if logs_resp.status_code == 200 else ""
                 return {**data, "raw_output": raw_output}
 
         return {"task_id": task_id, "status": "timeout", "raw_output": ""}
+
+
+async def _clone_repo(repo_url: str) -> str:
+    """Clone a git repo into the workspace. Returns the local path."""
+    repo_name = repo_url.rstrip("/").split("/")[-1].removesuffix(".git")
+    dest = os.path.join(WORKSPACE, repo_name)
+
+    if os.path.isdir(dest):
+        # Pull latest instead of re-cloning.
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", dest, "pull", "--ff-only",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        await proc.wait()
+        return dest
+
+    proc = await asyncio.create_subprocess_exec(
+        "git", "clone", "--depth", "1", repo_url, dest,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    await proc.wait()
+    if proc.returncode != 0:
+        output = await proc.stdout.read()
+        raise RuntimeError(f"git clone failed: {output.decode(errors='replace')}")
+    return dest
 
 
 def _format_result(result: dict) -> str:
@@ -118,18 +153,193 @@ async def vuln_scan(
         severity: Comma-separated severity filter (info,low,medium,high,critical).
         tags: Comma-separated template tags to include (e.g. "cve,oast").
     """
-    flags = ["-u", target, "-severity", severity]
+    flags = ["-severity", severity]
     if tags:
         flags.extend(["-tags", tags])
 
     result = await _execute_and_wait("nuclei", target, flags)
     if result["status"] == "failed":
         return f"Scan failed: {result.get('error', 'unknown error')}\n{result['raw_output']}"
+    return _format_result(result)
+
+
+# ── Code Audit (Semgrep) ────────────────────────────────────────────────────
+
+
+@mcp.tool()
+async def code_audit(
+    path: str,
+    ruleset: str = "p/default",
+    severity: str = "",
+) -> str:
+    """
+    Run a Semgrep static analysis scan on a codebase.
+
+    Accepts a local directory path (under /tmp/kinetic/workspace) or a git
+    repo URL (which will be cloned automatically).
+
+    Args:
+        path: Filesystem path to scan, or a git repo URL to clone and scan.
+        ruleset: Semgrep ruleset (e.g. "p/default", "p/owasp-top-ten", "p/ci").
+        severity: Filter by severity (e.g. "ERROR", "WARNING").
+    """
+    # If path looks like a URL, clone it first.
+    scan_path = path
+    if path.startswith("https://") or path.startswith("git@"):
+        scan_path = await _clone_repo(path)
+
+    flags = ["--config", ruleset]
+    if severity:
+        flags.extend(["--severity", severity])
+
+    result = await _execute_and_wait("semgrep", scan_path, flags)
+    if result["status"] == "failed":
+        return f"Audit failed: {result.get('error', 'unknown error')}\n{result['raw_output']}"
 
     parsed = result.get("parsed_output")
-    if parsed:
-        return json.dumps(parsed, indent=2, default=str)
-    return result.get("raw_output") or "No vulnerabilities found."
+    if parsed and isinstance(parsed, dict):
+        findings = parsed.get("results", [])
+        summary = {
+            "total_findings": len(findings),
+            "findings": [
+                {
+                    "rule": f.get("check_id", "unknown"),
+                    "severity": f.get("extra", {}).get("severity", "unknown"),
+                    "message": f.get("extra", {}).get("message", ""),
+                    "file": f.get("path", ""),
+                    "line": f.get("start", {}).get("line"),
+                    "code": f.get("extra", {}).get("lines", ""),
+                }
+                for f in findings
+            ],
+        }
+        return json.dumps(summary, indent=2)
+    return result.get("raw_output") or "No findings."
+
+
+# ── Subdomain Enumeration (Subfinder) ───────────────────────────────────────
+
+
+@mcp.tool()
+async def enumerate_subdomains(
+    domain: str,
+    recursive: bool = False,
+) -> str:
+    """
+    Enumerate subdomains for a root domain using passive sources.
+
+    Use this tool when given a root domain like example.com.
+
+    Args:
+        domain: Root domain to enumerate (e.g. example.com).
+        recursive: Enable recursive subdomain enumeration.
+    """
+    flags = ["-silent"]
+    if recursive:
+        flags.append("-recursive")
+
+    result = await _execute_and_wait("subfinder", domain, flags)
+    if result["status"] == "failed":
+        return f"Enumeration failed: {result.get('error', 'unknown error')}\n{result['raw_output']}"
+
+    parsed = result.get("parsed_output")
+    if parsed and isinstance(parsed, list):
+        subdomains = [
+            entry.get("host", entry) if isinstance(entry, dict) else entry
+            for entry in parsed
+        ]
+        summary = {
+            "domain": domain,
+            "total_subdomains": len(subdomains),
+            "subdomains": subdomains,
+        }
+        return json.dumps(summary, indent=2)
+    return result.get("raw_output") or "No subdomains found."
+
+
+# ── Hidden Parameter Discovery (Arjun) ──────────────────────────────────────
+
+
+@mcp.tool()
+async def find_hidden_params(
+    url: str,
+    method: str = "GET",
+    wordlist: str = "",
+) -> str:
+    """
+    Discover hidden HTTP parameters on a URL endpoint.
+
+    Args:
+        url: Target URL to probe (e.g. https://example.com/api/search).
+        method: HTTP method to use (GET, POST, JSON).
+        wordlist: Path to custom wordlist (optional, uses built-in by default).
+    """
+    flags = ["-m", method]
+    if wordlist:
+        flags.extend(["-w", wordlist])
+
+    result = await _execute_and_wait("arjun", url, flags)
+    if result["status"] == "failed":
+        return f"Discovery failed: {result.get('error', 'unknown error')}\n{result['raw_output']}"
+    return _format_result(result)
+
+
+# ── Secret Scanning (Gitleaks) ──────────────────────────────────────────────
+
+
+@mcp.tool()
+async def scan_secrets(
+    path: str,
+    no_git: bool = False,
+) -> str:
+    """
+    Scan a repository or directory for leaked secrets and credentials.
+
+    Accepts a local directory path or a git repo URL.
+
+    Args:
+        path: Filesystem path to scan, or a git repo URL to clone and scan.
+        no_git: If true, scan files without requiring a git repository.
+    """
+    scan_path = path
+    if path.startswith("https://") or path.startswith("git@"):
+        scan_path = await _clone_repo(path)
+
+    flags = []
+    if no_git:
+        flags.append("--no-git")
+
+    result = await _execute_and_wait("gitleaks", scan_path, flags)
+
+    # Gitleaks exits with code 1 when leaks are found (not an error).
+    parsed = result.get("parsed_output")
+    if parsed and isinstance(parsed, list):
+        leaks = [
+            {
+                "type": entry.get("RuleID", "unknown"),
+                "file": entry.get("File", ""),
+                "line_number": entry.get("StartLine"),
+                "match": entry.get("Match", ""),
+                "secret": entry.get("Secret", "")[0:8] + "***" if entry.get("Secret") else "",
+                "commit": entry.get("Commit", "")[:12],
+                "author": entry.get("Author", ""),
+            }
+            for entry in parsed
+        ]
+        summary = {
+            "total_leaks": len(leaks),
+            "leaks": leaks,
+        }
+        return json.dumps(summary, indent=2)
+
+    if result["status"] == "failed" and result.get("return_code") == 1:
+        # Gitleaks found leaks but structured parse failed — return raw.
+        return result.get("raw_output") or "Leaks detected (see raw output)."
+
+    if result["status"] == "failed":
+        return f"Scan failed: {result.get('error', 'unknown error')}\n{result['raw_output']}"
+
+    return "No secrets detected."
 
 
 # ── Abort Scan (Emergency Brake) ────────────────────────────────────────────
@@ -200,7 +410,7 @@ async def web_screenshot(target: str) -> str:
             head_resp = await client.head(target)
             profile["server_headers"] = dict(head_resp.headers)
     except Exception:
-        pass  # Headers are best-effort; continue with browser.
+        pass
 
     # Browser session for screenshot + DOM inspection.
     options = ChromeOptions()
@@ -217,17 +427,12 @@ async def web_screenshot(target: str) -> str:
         driver.set_page_load_timeout(30)
         driver.get(target)
 
-        # Give JS time to render.
         await asyncio.sleep(2)
 
-        # Page title.
         profile["page_title"] = driver.title or None
-
-        # Screenshot.
         screenshot_b64 = driver.get_screenshot_as_base64()
         profile["screenshot"] = f"data:image/png;base64,{screenshot_b64}"
 
-        # CMS detection via DOM inspection.
         page_source = driver.page_source
         profile["detected_cms"] = _detect_cms(page_source)
 
@@ -237,7 +442,6 @@ async def web_screenshot(target: str) -> str:
     return json.dumps(profile, indent=2, default=str)
 
 
-# CMS detection patterns: (name, regex applied to page source).
 _CMS_SIGNATURES = [
     ("WordPress", re.compile(r'wp-content|wp-includes|/wp-json/', re.IGNORECASE)),
     ("Joomla", re.compile(r'/media/jui/|com_content|Joomla!', re.IGNORECASE)),

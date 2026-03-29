@@ -1,0 +1,24 @@
+name: semgrep
+binary: semgrep
+description: Static analysis engine for finding bugs and enforcing code standards.
+target_mode: path
+structured_output:
+  format: json
+  flag: "--json"
+  path: "/tmp/kinetic/logs/{task_id}.json"
+  output_via_stdout: true
+default_flags:
+  - "scan"
+  - "--quiet"
+allowed_flags:
+  - "--config"
+  - "--severity"
+  - "--lang"
+  - "--include"
+  - "--exclude"
+  - "--max-target-bytes"
+  - "--timeout"
+  - "--jobs"
+  - "--metrics"
+  - "--no-git-ignore"
+  - "--verbose"

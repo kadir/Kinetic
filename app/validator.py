@@ -2,7 +2,7 @@
 Input validation layer — prevents command injection.
 
 Only whitelisted tools and flags are allowed through. Targets are validated
-to contain only safe characters (hostnames, IPs, URLs).
+to contain only safe characters (hostnames, IPs, URLs, or filesystem paths).
 """
 
 from __future__ import annotations
@@ -14,10 +14,16 @@ import yaml
 
 _TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
 
+# Allowed base directory for path-mode targets (must be under workspace).
+WORKSPACE_ROOT = Path("/tmp/kinetic/workspace")
+
 # Target must be a hostname, IPv4/v6, CIDR, or URL — no shell metacharacters.
 _TARGET_RE = re.compile(
     r"^[a-zA-Z0-9\.\-\:\/\[\]_%@]+$"
 )
+
+# Path-mode targets: alphanumerics, slashes, dots, hyphens, underscores.
+_PATH_RE = re.compile(r"^[a-zA-Z0-9\.\-_\/]+$")
 
 # Flags that are never allowed regardless of tool config.
 _GLOBAL_DENY = frozenset({
@@ -48,6 +54,27 @@ def validate_target(target: str) -> str | None:
         return f"Target contains forbidden characters: {target!r}"
     if not _TARGET_RE.match(target):
         return f"Target does not match allowed pattern: {target!r}"
+    return None
+
+
+def validate_path_target(target: str) -> str | None:
+    """
+    Validate a filesystem path target.
+
+    Must match safe characters and resolve under WORKSPACE_ROOT to prevent
+    path traversal attacks.
+    """
+    if _SHELL_META.search(target):
+        return f"Path contains forbidden characters: {target!r}"
+    if not _PATH_RE.match(target):
+        return f"Path does not match allowed pattern: {target!r}"
+
+    resolved = Path(target).resolve()
+    if not resolved.is_relative_to(WORKSPACE_ROOT):
+        return f"Path must be under {WORKSPACE_ROOT}: {target!r}"
+    if not resolved.exists():
+        return f"Path does not exist: {target!r}"
+
     return None
 
 

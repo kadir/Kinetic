@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     unzip \
+    git \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -28,8 +29,33 @@ RUN wget -q https://github.com/ffuf/ffuf/releases/latest/download/ffuf_$(wget -q
     && rm /tmp/ffuf.tar.gz \
     && chmod +x /usr/local/bin/ffuf
 
-# Create log directory.
-RUN mkdir -p /tmp/kinetic/logs
+# Install Subfinder.
+RUN wget -q https://github.com/projectdiscovery/subfinder/releases/latest/download/subfinder_$(wget -qO- https://api.github.com/repos/projectdiscovery/subfinder/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//')_linux_amd64.zip -O /tmp/subfinder.zip \
+    && unzip /tmp/subfinder.zip -d /usr/local/bin/ \
+    && rm /tmp/subfinder.zip \
+    && chmod +x /usr/local/bin/subfinder
+
+# Install Amass.
+RUN wget -q https://github.com/owasp-amass/amass/releases/latest/download/amass_Linux_amd64.zip -O /tmp/amass.zip \
+    && unzip /tmp/amass.zip -d /tmp/amass \
+    && mv /tmp/amass/amass_Linux_amd64/amass /usr/local/bin/amass \
+    && rm -rf /tmp/amass /tmp/amass.zip \
+    && chmod +x /usr/local/bin/amass
+
+# Install Gitleaks.
+RUN wget -q https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_$(wget -qO- https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep tag_name | cut -d '"' -f4 | sed 's/v//')_linux_amd64.tar.gz -O /tmp/gitleaks.tar.gz \
+    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin/ gitleaks \
+    && rm /tmp/gitleaks.tar.gz \
+    && chmod +x /usr/local/bin/gitleaks
+
+# Install Semgrep (Python-based).
+RUN pip install --no-cache-dir semgrep
+
+# Install Arjun (Python-based).
+RUN pip install --no-cache-dir arjun
+
+# Create working directories.
+RUN mkdir -p /tmp/kinetic/logs /tmp/kinetic/workspace
 
 WORKDIR /app
 

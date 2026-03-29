@@ -52,14 +52,20 @@ class TaskResult:
         return None
 
 
+WORKSPACE_DIR = Path("/tmp/kinetic/workspace")
+WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+
+
 @dataclass
 class _TaskEntry:
     task_id: str
     tool: str
     args: list[str]
     target: str
+    cwd: Optional[Path] = None
     structured_output_path: Optional[Path] = None
     structured_output_format: Optional[str] = None
+    structured_via_stdout: bool = False
     status: TaskStatus = TaskStatus.PENDING
     process: Optional[asyncio.subprocess.Process] = None
     log_file: Optional[Path] = None
@@ -125,8 +131,10 @@ class TaskManager:
         tool: str,
         args: list[str],
         target: str,
+        cwd: str | None = None,
         structured_output_path: str | None = None,
         structured_output_format: str | None = None,
+        structured_via_stdout: bool = False,
     ) -> str:
         """Submit a tool for background execution. Returns a task_id."""
         task_id = uuid.uuid4().hex[:12]
@@ -135,8 +143,10 @@ class TaskManager:
             tool=tool,
             args=args,
             target=target,
+            cwd=Path(cwd) if cwd else None,
             structured_output_path=Path(structured_output_path) if structured_output_path else None,
             structured_output_format=structured_output_format,
+            structured_via_stdout=structured_via_stdout,
         )
         self._tasks[task_id] = entry
         asyncio.create_task(self._run(entry))
@@ -150,19 +160,45 @@ class TaskManager:
             log_path = LOG_DIR / f"{entry.task_id}.log"
             entry.log_file = log_path
 
+            # Resolve cwd — must exist on disk.
+            run_cwd = str(entry.cwd) if entry.cwd and entry.cwd.is_dir() else None
+
             try:
                 proc = await asyncio.create_subprocess_exec(
                     entry.tool,
                     *entry.args,
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.STDOUT,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=run_cwd,
                 )
                 entry.process = proc
 
-                with open(log_path, "wb") as fh:
-                    async for chunk in proc.stdout:
-                        fh.write(chunk)
-                        fh.flush()
+                # Stream stdout to log (and optionally to structured file).
+                stdout_path = (
+                    entry.structured_output_path
+                    if entry.structured_via_stdout
+                    else None
+                )
+
+                with open(log_path, "wb") as log_fh:
+                    so_fh = open(stdout_path, "wb") if stdout_path else None
+                    try:
+                        async for chunk in proc.stdout:
+                            log_fh.write(chunk)
+                            log_fh.flush()
+                            if so_fh:
+                                so_fh.write(chunk)
+                                so_fh.flush()
+                    finally:
+                        if so_fh:
+                            so_fh.close()
+
+                # Capture stderr into the log as well.
+                stderr_data = await proc.stderr.read()
+                if stderr_data:
+                    with open(log_path, "ab") as log_fh:
+                        log_fh.write(b"\n--- STDERR ---\n")
+                        log_fh.write(stderr_data)
 
                 await proc.wait()
                 entry.finished_at = time.time()

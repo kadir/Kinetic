@@ -1,6 +1,7 @@
 name: nuclei
 binary: nuclei
 description: Template-based vulnerability scanner.
+target_flag: "-u"
 structured_output:
   format: jsonl
   flag: "-je"
@@ -11,7 +12,6 @@ allowed_flags:
   - "-tags"
   - "-severity"
   - "-type"
-  - "-u"
   - "-l"
   - "-c"
   - "-rl"

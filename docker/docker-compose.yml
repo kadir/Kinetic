@@ -13,6 +13,7 @@ services:
       - KINETIC_ENGINE_URL=http://localhost:8000
     volumes:
       - kinetic-logs:/tmp/kinetic/logs
+      - kinetic-workspace:/tmp/kinetic/workspace
     depends_on:
       selenium-chrome:
         condition: service_started
@@ -36,6 +37,7 @@ services:
 
 volumes:
   kinetic-logs:
+  kinetic-workspace:
 
 networks:
   kinetic-net:
